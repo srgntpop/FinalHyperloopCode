@@ -76,6 +76,7 @@ state = 1
 previousState = 1
 guiInput = 0
 command = b'0'
+insert = None
 
 unpacker = struct.Struct('1? 3I 17f')
 
@@ -662,7 +663,8 @@ def getStateDiagram(root):
 
 
 def commands(canvas):
-    commands= tk.Label(canvas, width=200, height=800, background="black")
+    global insert
+    commands = tk.Label(canvas, width=200, height=800, background="black")
     commands.place(x=1300, y=100)
 
     insert = tk.Button(commands, text='Insert Pod', command=lambda: sendCommand(b'1'), width=15, height=7)
@@ -682,9 +684,11 @@ def commands(canvas):
 
 
 def sendCommand(cmd):
-    global command
+    global command, insert
     command = cmd
     print(command)
+    if(command == b'1'):
+        insert.config(text='Pod Stable')
 
 
 def Stop(stopFrame):
