@@ -15,7 +15,7 @@ import struct
 import random
 import serial
 import time
-import vnpy
+# import vnpy
 
 # Constants
 ACCELERATION_THRESHOLD = .5  # threshold at which pod can be determined to be accelerating, m/s^2
@@ -40,6 +40,7 @@ TRANSITION_CHECK_COUNT = 10  # number of times a transition is requested before 
 
 # sensor variables
 guiInput = 0  # command sent from GUI
+podInserted = False
 mode = 0  # state that SpaceX has designated in the safety manual
 proposedStateNumber = 0  # number corresponding to state that software wishes to change to
 proposedStateCount = 0  # number of times state change has been proposed
@@ -82,16 +83,97 @@ masterSerial = None
 vnUsbPort = '/dev/ttyUSB0'
 vnBaud = 115200
 vnConnect = False
-vn100 = VnSensor()
+# vn100 = VnSensor()
 countVn = 0
 
 # Struct
 packer = struct.Struct('1? 3I 17f')
 
 
+
+
 # function that reads information from master arduino and updates sensor variables
 def readMaster():
     print("read master")
+    global masterConnect, masterSerial
+    if (masterConnect == False):
+        try:
+            masterSerial = serial.Serial(masterUsbPort, masterBaud)
+            masterConnect = True
+        except Exception as exc:
+            print("Master connect failed. Exception raised: ")
+            print(exc)
+    else:
+        print("Master connected...")
+        serialDataIn = masterSerial.readline().strip()
+        serialArray = serialDataIn.decode("utf-8").split(',')
+    # set variables equal to the array indeces
+
+
+# function that reads information from GUI and updates guiInput variable
+def readGUI():
+    global guiConnect, guiInput, sock
+    if guiConnect == False:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect(server_address)
+            sock.settimeout(2)
+            sock.send(b'0')
+            retVal = sock.recv(1)
+            retVal = retVal.decode('utf-8')
+            if retVal == '0':
+                guiConnect = True
+            else:
+                guiConnect = False
+                print('Correct verification message not sent')
+        except Exception as exc:
+            guiConnect = False
+            print('GUI connection failed. Exception raised: ')
+            print(exc)
+    else:
+        try:
+            command = sock.recv(1)
+            command = command.decode('utf-8')
+            guiInput = int(command)
+            print(guiInput)
+        except Exception as exc:
+            guiConnect = False
+            sock.close()
+            print('GUI connection has dropped. Exception raised: ')
+            print(exc)
+
+
+def medianFilter(arrayIn):
+    median = 0.0
+    # account for irregular array sizes, but should be len = 10
+    sortedArrayIn = sorted(arrayIn)
+    if (len(sortedArrayIn) % 2 == 1):
+        median = sortedArrayIn[(len(sortedArrayIn) - 1) // 2]
+    else:
+        median = sortedArrayIn[len(sortedArrayIn) // 2]
+    return median
+
+
+def meanFilter(arrayIn):
+    mean = 0.0
+    count = 0
+    sum = 0.0
+
+    for i in range(len(arrayIn) // 2):
+        sum += arrayIn[i] + arrayIn[len(arrayIn) - 1 - i]
+        count += 1
+
+    if len(arrayIn) % 2 == 1:
+        sum += arrayIn[(len(arrayIn) - 1) / 2]
+
+    mean = sum / float(count)
+    return mean
+
+
+# this function does any computations to update the variables, like position and velocity
+# this function does any computations to update the variables, like position and velocity
+def compute():
+    global countVn
     # GUI value Testing Code
     global currentState
     global timeElapsed
@@ -133,104 +215,19 @@ def readMaster():
     velocityX = random.uniform(0.0, 100.0)
     velocityY = random.uniform(0.0, 100.0)
     velocityZ = random.uniform(0.0, 100.0)
-    global masterConnect, masterSerial
-    if (masterConnect == False):
-        try:
-            masterSerial = serial.Serial(masterUsbPort, masterBaud)
-            masterConnect = True
-        except Exception as exc:
-            print("Master connect failed. Exception raised: ")
-            print(exc)
-    else:
-        print("Master connected...")
-        serialDataIn = masterSerial.readline().strip()
-        serialArray = serialDataIn.decode("utf-8").split(',')
-    # set variables equal to the array indeces
-
-
-# function that reads information from GUI and updates guiInput variable
-def readGUI():
-    global guiConnect, guiInput, sock
-    if guiConnect == False:
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(2)
-            sock.connect(server_address)
-            sock.send(b'0')
-            retVal = sock.recv(1)
-            retVal = retVal.decode('utf-8')
-            if retVal == '0':
-                guiConnect = True
-            else:
-                guiConnect = False
-                print('Correct verification message not sent')
-        except Exception as exc:
-            guiConnect = False
-            print('GUI connection failed. Exception raised: ')
-            print(exc)
-    else:
-        try:
-            command = sock.recv(1)
-            command = command.decode('utf-8')
-            guiInput = int(command)
-        except Exception as exc:
-            guiConnect = False
-            sock.close()
-            print('GUI connection has dropped. Exception raised: ')
-            print(exc)
-
-
-def medianFilter(arrayIn):
-    median = 0.0
-    # account for irregular array sizes, but should be len = 10
-    sortedArrayIn = sorted(arrayIn)
-    if (len(sortedArrayIn) % 2 == 1):
-        median = sortedArrayIn[(len(sortedArrayIn) - 1) // 2]
-    else:
-        median = sortedArrayIn[len(sortedArrayIn) // 2]
-    return median
-
-
-def meanFilter(arrayIn):
-    mean = 0.0
-    count = 0
-    sum = 0.0
-
-    for i in range(len(arrayIn) // 2):
-        sum += arrayIn[i] + arrayIn[len(arrayIn) - 1 - i]
-        count += 1
-
-    if len(arrayIn) % 2 == 1:
-        sum += arrayIn[(len(arrayIn) - 1) / 2]
-
-    mean = sum / float(count)
-    return mean
-
-
-# this function does any computations to update the variables, like position and velocity
-# this function does any computations to update the variables, like position and velocity
-def compute():
-    global countVn
-    global accelerationX
-    global accelerationY
-    global accelerationZ
-    global position
-    global velocityX
-    global velocityY
-    global velocityZ
-    if (vnConnect == False):
-        try:
-            vn100.connect(vnUsbPort, vnBaud)
-            vnConnect = True
-        except Exception as exc:
-            print("VN100 connection down: ")
-            print(exc)
-    else:
-        countVn += 1
-        register = vn100.read_yaw_pitch_roll_magnetic_acceleration_and_angular_rates()
-        accelerationX = register.accel.x
-        accelerationY = register.accel.y
-        accelerationZ = register.accel.z
+    # if (vnConnect == False):
+    #     try:
+    #         vn100.connect(vnUsbPort, vnBaud)
+    #         vnConnect = True
+    #     except Exception as exc:
+    #         print("VN100 connection down: ")
+    #         print(exc)
+    # else:
+    #     countVn += 1
+    #     register = vn100.read_yaw_pitch_roll_magnetic_acceleration_and_angular_rates()
+    #     accelerationX = register.accel.x
+    #     accelerationY = register.accel.y
+    #     accelerationZ = register.accel.z
 
 
 # turns off pi, (batteries?), do we want there to be no electricity?, do we have a switch for the batteries
@@ -264,14 +261,26 @@ def stateChange():
     global proposedStateCount
     global proposedStateNumber
     global guiInput
-
+    global podInserted
     print("state change")
+    print(currentState)
     # idle
     if (currentState == 0):
         # needs to get updated to accept 10 inputs sequentially
-        if (guiInput == 1):
-            while (guiInput != '1'):
-                readGUI()
+        if (guiInput == 1 and podInserted == False):
+            guiInput = 0
+            while (guiInput != 1):
+                print('Inserting Pod')
+                try:
+                    command = sock.recv(1)
+                    command = command.decode('utf-8')
+                    guiInput = int(command)
+                    print(guiInput)
+                except Exception as exc:
+                    print(exc)
+            print('Pod Inserted')
+            podInserted = True
+
         elif (guiInput == 2):
             if (proposedStateCount > TRANSITION_CHECK_COUNT):
                 currentState = 2
@@ -490,20 +499,21 @@ def main():
     startTime = time.time()
     timePassed = 0.0
     while (True):
-        readMaster()
+        # readMaster()
         readGUI()
         # compute()
-        if (masterConnect == True):
-            compute()
-            writeMaster()
-            stateChange()
+        # if (masterConnect == True):
+        #     compute()
+        #     writeMaster()
+        #     stateChange()
+        stateChange()
         if (guiConnect == True):
             writeGUI()
         timePassed = time.time() - startTime
-        if (timePassed > 10.0):
-            break
-    print("times vn data is gathered in 10 seconds: ")
-    print(countVn)
+    #     if (timePassed > 10.0):
+    #         break
+    # print("times vn data is gathered in 10 seconds: ")
+    # print(countVn)
 
 
 # Run Main

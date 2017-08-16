@@ -84,6 +84,12 @@ def transferData():
     global conn, command, connection
     try:
         conn.send(command)
+        if(command == b'1'):
+            command = b'0'
+            while(command != b'1'):
+                print('waiting for second command')
+                conn.send(b'0')
+            conn.send(b'1')
         command = b'0'
     except Exception as exc:
         print('The command code failed to send. Exception raised: ')
