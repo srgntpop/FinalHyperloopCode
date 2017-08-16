@@ -77,12 +77,13 @@ previousState = 1
 guiInput = 0
 command = b'0'
 insert = None
+sendSameInput = 0
 
 unpacker = struct.Struct('1? 3I 17f')
 
 def transferData():
 
-    global conn, command, connection
+    global conn, command, connection, sendSameInput
     try:
         conn.send(command)
         if(command == b'1'):
@@ -91,7 +92,13 @@ def transferData():
                 print('waiting for second command')
                 conn.send(b'0')
             conn.send(b'1')
-        command = b'0'
+        elif(command != b'0'):
+            if(sendSameInput >= 10):
+                sendSameInput = 0
+                command = b'0'
+            else:
+                sendSameInput += 1
+
     except Exception as exc:
         print('The command code failed to send. Exception raised: ')
         print(exc)

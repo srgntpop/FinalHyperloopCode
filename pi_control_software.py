@@ -501,7 +501,7 @@ def main():
     while (True):
         # readMaster()
         readGUI()
-        # compute()
+        compute()
         # if (masterConnect == True):
         #     compute()
         #     writeMaster()
